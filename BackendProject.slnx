@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/backend/">
+    <Project Path="backend/BackendProject.API/BackendProject.API.csproj" />
+    <Project Path="backend/BackendProject.Application/BackendProject.Application.csproj" />
+    <Project Path="backend/BackendProject.Domain/BackendProject.Domain.csproj" />
+    <Project Path="backend/BackendProject.Infrastructure/BackendProject.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BackendProject.Tests/BackendProject.Tests.csproj" />
+  </Folder>
+</Solution>
