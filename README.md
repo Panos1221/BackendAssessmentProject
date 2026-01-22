@@ -11,12 +11,12 @@ A .NET 8 Web API for managing Employees, Departments, and Projects with clean ar
 
 ## Features
 
-- CRUD operations for Employees, Departments, and Projects ([Controllers](src/BackendProject.API/Controllers/))
-- Pagination support ([PaginationParams](src/BackendProject.Application/Common/PaginationParams.cs))
-- Soft delete functionality ([BaseEntity](src/BackendProject.Domain/Common/BaseEntity.cs))
-- FluentValidation ([Validators](src/BackendProject.Application/Validators/))
-- Global exception handling middleware ([GlobalExceptionMiddleware](src/BackendProject.API/Middleware/GlobalExceptionMiddleware.cs))
-- Swagger documentation ([Program.cs](src/BackendProject.API/Program.cs))
+- CRUD operations for Employees, Departments, and Projects ([Controllers](backend/BackendProject.API/Controllers/))
+- Pagination support ([PaginationParams](backend/BackendProject.Application/Common/PaginationParams.cs))
+- Soft delete functionality ([BaseEntity](backend/BackendProject.Domain/Common/BaseEntity.cs))
+- FluentValidation ([Validators](backend/BackendProject.Application/Validators/))
+- Global exception handling middleware ([GlobalExceptionMiddleware](backend/BackendProject.API/Middleware/GlobalExceptionMiddleware.cs))
+- Swagger documentation ([Program.cs](backend/BackendProject.API/Program.cs))
 - Unit tests for business logic ([Tests](tests/BackendProject.Tests/))
 
 **Frontend**: See [frontend/README.md](frontend/README.md) for the optional React frontend application (Supports CRUD operations).
