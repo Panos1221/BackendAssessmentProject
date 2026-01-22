@@ -1,6 +1,6 @@
 # Backend Developer Technical Assessment
 
-A .NET 8 Web API for managing Employees, Departments, and Projects.
+A .NET 8 Web API for managing Employees, Departments, and Projects with clean architecture principles.
 
 ## Tech Stack
 
@@ -11,13 +11,15 @@ A .NET 8 Web API for managing Employees, Departments, and Projects.
 
 ## Features
 
-- CRUD operations for Employees, Departments, and Projects
-- Pagination support
-- Soft delete functionality
-- FluentValidation
-- Global exception handling middleware
-- Swagger documentation
-- Unit tests
+- CRUD operations for Employees, Departments, and Projects ([Controllers](src/BackendProject.API/Controllers/))
+- Pagination support ([PaginationParams](src/BackendProject.Application/Common/PaginationParams.cs))
+- Soft delete functionality ([BaseEntity](src/BackendProject.Domain/Common/BaseEntity.cs))
+- FluentValidation ([Validators](src/BackendProject.Application/Validators/))
+- Global exception handling middleware ([GlobalExceptionMiddleware](src/BackendProject.API/Middleware/GlobalExceptionMiddleware.cs))
+- Swagger documentation ([Program.cs](src/BackendProject.API/Program.cs))
+- Unit tests for business logic ([Tests](tests/BackendProject.Tests/))
+
+**Frontend**: See [frontend/README.md](frontend/README.md) for the optional React frontend application (Supports CRUD operations).
 
 ## Getting Started
 
@@ -43,7 +45,14 @@ The API will be available at `http://localhost:5000` (or the port configured in 
 ### Running without docker: 
 
    ```bash
-   cd backend/BackendProject.API
+   cd src/BackendProject.API
+   dotnet run
+   ```
+
+### Running without docker: 
+
+   ```bash
+   cd src/BackendProject.API
    dotnet run
    ```   
 
@@ -69,7 +78,7 @@ dotnet test
 
 ### Using .NET CLI
 ```bash
-cd backend/BackendProject.Infrastructure
+cd src/BackendProject.Infrastructure
 
 dotnet ef database update --startup-project ../BackendProject.API
 ```
@@ -78,27 +87,6 @@ dotnet ef database update --startup-project ../BackendProject.API
 ```bash
 # Migration command executes inside API container
 docker exec -it backend-api dotnet ef database update
-```
-
-### Useful Query:
-
-Μας επιστρέφει τα ονόματα των employees και τα projects στα οποία έχουν ανατεθεί.
-
-```sql
-SELECT
-    e.FirstName,
-    e.LastName,
-    p.Name AS ProjectName,
-    p.Description AS ProjectDescription,
-    p.StartDate,
-    p.EndDate
-FROM Employees e
-INNER JOIN EmployeeProjects ep
-    ON e.Id = ep.EmployeeId
-INNER JOIN Projects p
-    ON ep.ProjectId = p.Id
-WHERE e.IsDeleted = 0
-  AND p.IsDeleted = 0;
 ```
 
 ---
