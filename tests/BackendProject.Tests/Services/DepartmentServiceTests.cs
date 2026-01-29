@@ -14,7 +14,7 @@ public class DepartmentServiceTests : ServiceTestBase
 
     public DepartmentServiceTests()
     {
-        _departmentService = new DepartmentService(UnitOfWork);
+        _departmentService = new DepartmentService(Departments, Employees, SaveChanges);
         SeedTestData();
     }
 

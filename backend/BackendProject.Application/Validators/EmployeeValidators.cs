@@ -1,4 +1,5 @@
 using BackendProject.Application.DTOs;
+using BackendProject.Domain.Entities;
 using BackendProject.Domain.Interfaces;
 using FluentValidation;
 
@@ -9,13 +10,13 @@ namespace BackendProject.Application.Validators;
 /// </summary>
 public class CreateEmployeeValidator : AbstractValidator<CreateEmployeeRequest>
 {
-    public CreateEmployeeValidator(IUnitOfWork unitOfWork)
+    public CreateEmployeeValidator(IRepository<Employee> employees, IRepository<Department> departments)
     {
         ApplyNameRules();
         ApplyHireDateRules();
         ApplyStatusRules();
         ApplyNotesRules();
-        ApplyDepartmentRules(unitOfWork);
+        ApplyDepartmentRules(departments);
 
         RuleFor(x => x.Email)
             .NotEmpty().WithMessage("Email is required")
@@ -26,7 +27,7 @@ public class CreateEmployeeValidator : AbstractValidator<CreateEmployeeRequest>
                 if (string.IsNullOrWhiteSpace(email))
                     return true;
 
-                var exists = await unitOfWork.Employees.AnyAsync(
+                var exists = await employees.AnyAsync(
                     e => e.Email.ToLower() == email.ToLower(),
                     cancellation);
                 return !exists;
@@ -64,7 +65,7 @@ public class CreateEmployeeValidator : AbstractValidator<CreateEmployeeRequest>
             .MaximumLength(1000).WithMessage("Notes cannot exceed 1000 characters");
     }
 
-    private void ApplyDepartmentRules(IUnitOfWork unitOfWork)
+    private void ApplyDepartmentRules(IRepository<Department> departments)
     {
         RuleFor(x => x.DepartmentId)
             .NotEmpty().WithMessage("Department is required")
@@ -73,7 +74,7 @@ public class CreateEmployeeValidator : AbstractValidator<CreateEmployeeRequest>
                 if (departmentId == Guid.Empty)
                     return true;
 
-                return await unitOfWork.Departments.ExistsAsync(departmentId, cancellation);
+                return await departments.ExistsAsync(departmentId, cancellation);
             })
             .WithMessage("The specified department does not exist.");
     }
@@ -84,13 +85,13 @@ public class CreateEmployeeValidator : AbstractValidator<CreateEmployeeRequest>
 /// </summary>
 public class UpdateEmployeeValidator : AbstractValidator<UpdateEmployeeRequest>
 {
-    public UpdateEmployeeValidator(IUnitOfWork unitOfWork)
+    public UpdateEmployeeValidator(IRepository<Employee> employees, IRepository<Department> departments)
     {
         ApplyNameRules();
         ApplyHireDateRules();
         ApplyStatusRules();
         ApplyNotesRules();
-        ApplyDepartmentRules(unitOfWork);
+        ApplyDepartmentRules(departments);
 
         RuleFor(x => x.Email)
             .NotEmpty().WithMessage("Email is required")
@@ -101,7 +102,7 @@ public class UpdateEmployeeValidator : AbstractValidator<UpdateEmployeeRequest>
                 if (string.IsNullOrWhiteSpace(email))
                     return true;
 
-                var exists = await unitOfWork.Employees.AnyAsync(
+                var exists = await employees.AnyAsync(
                     e => e.Email.ToLower() == email.ToLower() && e.Id != request.Id,
                     cancellation);
                 return !exists;
@@ -139,7 +140,7 @@ public class UpdateEmployeeValidator : AbstractValidator<UpdateEmployeeRequest>
             .MaximumLength(1000).WithMessage("Notes cannot exceed 1000 characters");
     }
 
-    private void ApplyDepartmentRules(IUnitOfWork unitOfWork)
+    private void ApplyDepartmentRules(IRepository<Department> departments)
     {
         RuleFor(x => x.DepartmentId)
             .NotEmpty().WithMessage("Department is required")
@@ -148,7 +149,7 @@ public class UpdateEmployeeValidator : AbstractValidator<UpdateEmployeeRequest>
                 if (departmentId == Guid.Empty)
                     return true;
 
-                return await unitOfWork.Departments.ExistsAsync(departmentId, cancellation);
+                return await departments.ExistsAsync(departmentId, cancellation);
             })
             .WithMessage("The specified department does not exist.");
     }

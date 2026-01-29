@@ -5,23 +5,23 @@
 
 1. [Επισκόπηση Project](#1-επισκόπηση-project)
 2. [Αρχιτεκτονική](#2-αρχιτεκτονική)
+   - [Γιατί χρειάζεται ο διαχωρισμός των layers](#γιατί-χρειάζεται-ο-διαχωρισμός-των-layers-domain-application-infrastructure)
 3. [Backend Features](#3-backend-features)
    - [3.1 CRUD Operations για Entities (Employees, Departments, Projects)](#31-crud-operations-για-entities-employees-departments-projects)
    - [3.2 Pagination](#32-pagination)
    - [3.3 Soft Delete](#33-soft-delete)
    - [3.4 Validation (FluentValidation)](#34-validation-fluentvalidation)
    - [3.5 Global Exception Handling](#35-global-exception-handling)
-   - [3.6 Transactions](#36-transactions)
+   - [3.6 Data Persistence](#36-data-persistence)
    - [3.7 Repository Pattern](#37-repository-pattern)
-   - [3.8 Unit of Work Pattern](#38-unit-of-work-pattern)
-   - [3.9 Swagger/OpenAPI Documentation](#39-swaggeropenapi-documentation)
-   - [3.10 Logging (Serilog)](#310-logging-serilog)
-   - [3.11 Dependency Injection](#311-dependency-injection)
-   - [3.12 Database Migrations](#312-database-migrations)
-   - [3.13 Data Seeding](#313-data-seeding)
-   - [3.14 CORS Configuration](#314-cors-configuration)
-   - [3.15 Health Check Endpoint](#315-health-check-endpoint)
-   - [3.16 Docker & Containerization](#316-docker--containerization)
+   - [3.8 Swagger/OpenAPI Documentation](#38-swaggeropenapi-documentation)
+   - [3.9 Logging (Serilog)](#39-logging-serilog)
+   - [3.10 Dependency Injection](#310-dependency-injection)
+   - [3.11 Database Migrations](#311-database-migrations)
+   - [3.12 Data Seeding](#312-data-seeding)
+   - [3.13 CORS Configuration](#313-cors-configuration)
+   - [3.14 Health Check Endpoint](#314-health-check-endpoint)
+   - [3.15 Docker & Containerization](#315-docker--containerization)
 4. [API Endpoints Summary](#4-api-endpoints-summary)
 5. [Testing](#5-testing)
 
@@ -63,9 +63,75 @@ backend/
 | **Domain** | `BackendProject.Domain` | Entities, Domain interfaces, Enums | `Entities/`, `Interfaces/`, `Enums/`, `Common/` |
 | **Infrastructure** | `BackendProject.Infrastructure` | Data access, EF Core, Repositories, Migrations | `Data/`, `Repositories/`, `Migrations/` |
 
+### Γιατί χρειάζεται ο διαχωρισμός των layers (Domain, Application, Infrastructure)
+
+Ο διαχωρισμός σε ξεχωριστά layers εξυπηρετεί συγκεκριμένους σκοπούς:
+
+**1. Domain Layer - Ο πυρήνας χωρίς εξαρτήσεις**
+
+- **Τι περιέχει:** Entities, interfaces (`IRepository<T>`, `ISaveChanges`), Enums
+- **Γιατί ξεχωριστά:**
+  - **Zero dependencies:** Το Domain δεν εξαρτάται από κανένα άλλο project (όχι EF, όχι HTTP, όχι SQL)
+  - **Reusability:** Οι ίδιες entities και interfaces μπορούν να χρησιμοποιηθούν σε API, background jobs, console apps, ή ακόμα και σε διαφορετικό frontend
+  - **Stability:** Ο business domain αλλάζει σπάνια· τα "how" (database, HTTP) αλλάζουν συχνότερα
+  - **Testability:** Μπορείς να test-άρεις domain logic χωρίς database ή web server
+
+**2. Application Layer - Η business logic που εξαρτάται μόνο από Domain**
+
+- **Τι περιέχει:** Services, DTOs, Validators, Mappers
+- **Γιατί ξεχωριστά:**
+  - **Depends only on Domain:** Το Application γνωρίζει μόνο interfaces (`IRepository<T>`, `ISaveChanges`), όχι πώς υλοποιούνται
+  - **Database-agnostic:** Δεν ξέρει αν τα δεδομένα έρχονται από SQL Server, PostgreSQL, MongoDB ή in-memory· απλά καλεί `repository.Query()` και `saveChanges.SaveChangesAsync()`
+  - **Swappable implementations:** Αν αλλάξεις από EF Core σε Dapper, αλλάζεις μόνο Infrastructure· το Application μένει αμετάβλητο
+  - **Easy unit testing:** Mock-άρεις τα `IRepository<T>` και `ISaveChanges` χωρίς πραγματική βάση
+
+**3. Infrastructure Layer - Οι συγκεκριμένες υλοποιήσεις**
+
+- **Τι περιέχει:** AppDbContext, Repository implementations, EF configurations, Migrations
+- **Γιατί ξεχωριστά:**
+  - **Contains "how":** Όλη η λογική "πώς μιλάμε στη βάση" ζει εδώ (EF Core, connection strings, SQL)
+  - **Implements Domain interfaces:** Το `Repository<T>` υλοποιεί `IRepository<T>`, το `AppDbContext` υλοποιεί `ISaveChanges`
+  - **Replaceable:** Μπορείς να αντικαταστήσεις ολόκληρο το Infrastructure project (π.χ. από EF σε Dapper) χωρίς να αγγίξεις Application ή Domain
+  - **Framework details isolated:** EF-specific code (configurations, migrations) μένει μακριά από business logic
+
+**4. API Layer - Το HTTP entry point**
+
+- **Τι περιέχει:** Controllers, Middleware, Filters
+- **Γιατί ξεχωριστά:**
+  - **Thin layer:** Μεταφράζει HTTP requests σε service calls και επιστρέφει responses
+  - **Replaceable transport:** Το ίδιο Application μπορεί να τροφοδοτηθεί από REST API, gRPC, ή message queue consumers
+  - **Presentation concerns:** CORS, Swagger, exception formatting ανήκουν εδώ, όχι στο business logic
+
+**5. Dependency Rule - Οι εξαρτήσεις δείχνουν προς τα μέσα**
+
+```
+API ──────────► Application ──────────► Domain
+  │                     │
+  │                     │ (depends on interfaces only)
+  │                     │
+  └─────────────────────┼─────────────────────────► Infrastructure
+                        │                                    │
+                        │                                    │ implements
+                        │                                    ▼
+                        └──────────────────────────────► Domain interfaces
+```
+
+- **Domain:** Κανένα reference σε άλλα projects
+- **Application:** Reference μόνο στο Domain (χρησιμοποιεί `IRepository<T>`, `ISaveChanges`)
+- **Infrastructure:** Reference στο Domain (υλοποιεί τις interfaces)
+- **API:** Reference στο Application και Infrastructure (για DI registration)
+
+**Πρακτικό παράδειγμα - Τι κερδίζουμε:**
+
+| Σενάριο | Χωρίς διαχωρισμό | Με Clean Architecture |
+|---------|-------------------|------------------------|
+| Αλλαγή database (SQL → PostgreSQL) | Αλλαγές σε όλο το codebase | Αλλαγές μόνο στο Infrastructure |
+| Unit tests χωρίς database | Δύσκολο (πρέπει να mock-άρεις ολόκληρο DbContext) | Εύκολο (mock `IRepository<T>` και `ISaveChanges`) |
+| Νέο API (π.χ. gRPC δίπλα στο REST) | Duplicate business logic | Ίδιο Application, νέο API project |
+| Αλλαγή ORM (EF → Dapper) | Refactor σε πολλά αρχεία | Νέο Infrastructure project, Application αμετάβλητο |
+
 **Design Patterns:**
 - Repository Pattern (`IRepository<T>`, `Repository<T>`)
-- Unit of Work Pattern (`IUnitOfWork`, `UnitOfWork`)
 - Dependency Injection (Constructor injection)
 - DTO Pattern (Request/Response DTOs)
 
@@ -84,7 +150,7 @@ backend/
 | Component | Τι είναι | Ευθύνη | Πού βρίσκεται |
 |-----------|----------|--------|---------------|
 | **Controller** | HTTP entry point | Δέχεται HTTP requests, καλεί Services, επιστρέφει HTTP responses | `BackendProject.API/Controllers/{Entity}Controller.cs` |
-| **Service** | Business logic layer | Περιέχει business logic, καλεί UnitOfWork, map-άρει entities ↔ DTOs | `BackendProject.Application/Services/{Entity}Service.cs` |
+| **Service** | Business logic layer | Περιέχει business logic, καλεί Repositories και ISaveChanges, map-άρει entities ↔ DTOs | `BackendProject.Application/Services/{Entity}Service.cs` |
 | **Interface** | Service contract | Ορίζει τα methods που πρέπει να υλοποιήσει το Service | `BackendProject.Application/Interfaces/I{Entity}Service.cs` |
 | **DTOs** | Data Transfer Objects | Request/Response objects για API communication (ΔΕΝ είναι το table schema - αυτό είναι το Entity) | `BackendProject.Application/DTOs/{Entity}Dtos.cs` |
 | **Validators** | Validation rules | FluentValidation rules για input validation | `BackendProject.Application/Validators/{Entity}Validators.cs` |
@@ -201,7 +267,7 @@ backend/
 
 **Employee-Project Assignments:**
 - Idempotent assignment (no error αν already assigned)
-- Transaction-based operations
+- Atomic operations via EF SaveChangesAsync
 - Validation of employee και project existence
 - Detailed error messages για missing entities
 
@@ -247,7 +313,7 @@ var result = await _employeeService.GetAllAsync(pagination, cancellationToken);
 // Returns: { Items: [10 employees], TotalCount: 150, TotalPages: 15, HasNext: true, HasPrevious: false }
 
 // Στο Service
-var query = _unitOfWork.Employees.Query().Include(e => e.Department);
+var query = _employees.Query().Include(e => e.Department);
 return await query.ToPaginatedResultAsync(pagination, EmployeeMapper.ToResponse, cancellationToken);
 ```
 
@@ -346,12 +412,12 @@ return await query.ToPaginatedResultAsync(pagination, EmployeeMapper.ToResponse,
 
 **Validator Implementation Pattern:**
 
-Κάθε validator κληρονομεί από `AbstractValidator<T>` και ορίζει rules με fluent syntax:
+Κάθε validator κληρονομεί από `AbstractValidator<T>` και ορίζει rules με fluent syntax. Validators inject συγκεκριμένα repositories για async database checks:
 
 ```csharp
 public class CreateEmployeeValidator : AbstractValidator<CreateEmployeeRequest>
 {
-    public CreateEmployeeValidator(IUnitOfWork unitOfWork)
+    public CreateEmployeeValidator(IRepository<Employee> employees, IRepository<Department> departments)
     {
         // Sync validation rules
         RuleFor(x => x.FirstName)
@@ -364,7 +430,7 @@ public class CreateEmployeeValidator : AbstractValidator<CreateEmployeeRequest>
             .EmailAddress().WithMessage("Invalid email format")
             .MustAsync(async (email, cancellation) =>
             {
-                var exists = await unitOfWork.Employees.AnyAsync(
+                var exists = await employees.AnyAsync(
                     e => e.Email.ToLower() == email.ToLower(),
                     cancellation);
                 return !exists;
@@ -524,222 +590,79 @@ public class CreateEmployeeValidator : AbstractValidator<CreateEmployeeRequest>
 
 ---
 
-### 3.6 Transactions
+### 3.6 Data Persistence
 
-**Feature:** Database transaction management για atomic operations με integration μεταξύ Repository Pattern και Unit of Work Pattern.
+**Feature:** Atomic data persistence via EF Core `SaveChangesAsync` με `ISaveChanges` interface για clean architecture layering.
 
-**Τι είναι:** Ένα Transaction είναι μια ακολουθία database operations που αντιμετωπίζονται ως ένα atomic unit. Είτε όλες οι operations επιτυγχάνουν μαζί (commit), είτε όλες οι operations αναιρούνται μαζί (rollback). Αυτό εξασφαλίζει ότι η βάση είναι πάντα σε consistent state.
+**Τι είναι:** Η persistence των αλλαγών στη βάση γίνεται μέσω του `ISaveChanges.SaveChangesAsync()`. Το Entity Framework Core εξασφαλίζει ότι κάθε κλήση `SaveChangesAsync` είναι **atomic** - είτε όλες οι αλλαγές στο change tracker επιτυγχάνουν μαζί, είτε καμία δεν αποθηκεύεται.
 
 **Γιατί χρησιμοποιείται:**
-- **Data Consistency:** Αποτρέπει partial updates (π.χ. employee δημιουργήθηκε αλλά department δεν ενημερώθηκε)
-- **Atomicity:** All-or-nothing operations (είτε όλα επιτυγχάνουν είτε όλα αποτυγχάνουν)
-- **Error Recovery:** Αν οποιαδήποτε operation αποτύχει, όλες οι αλλαγές rollback-άρονται αυτόματα
-- **Concurrency:** Αποτρέπει race conditions όταν πολλαπλές operations συμβαίνουν ταυτόχρονα
-- **Referential Integrity:** Εξασφαλίζει ότι related data ενημερώνονται μαζί (π.χ. employee και τα projects του)
+- **Atomicity:** Κάθε `SaveChangesAsync` call είναι atomic - all-or-nothing
+- **Data Consistency:** Αποτρέπει partial updates (αν exception συμβεί πριν το SaveChangesAsync, καμία αλλαγή δεν αποθηκεύεται)
+- **Clean Architecture:** Το `ISaveChanges` interface διατηρεί το Application layer ανεξάρτητο από Infrastructure
+- **EF-Only:** Το project χρησιμοποιεί μόνο Entity Framework - δεν απαιτείται explicit transaction management για single-context operations
 
 **Πού βρίσκεται:**
-- **Unit of Work:** [`backend/BackendProject.Infrastructure/Repositories/UnitOfWork.cs`](backend/BackendProject.Infrastructure/Repositories/UnitOfWork.cs)
-- **Repository:** [`backend/BackendProject.Infrastructure/Repositories/Repository.cs`](backend/BackendProject.Infrastructure/Repositories/Repository.cs)
-- **Extension:** [`backend/BackendProject.Application/Common/TransactionExtensions.cs`](backend/BackendProject.Application/Common/TransactionExtensions.cs)
+- **Interface:** [`backend/BackendProject.Domain/Interfaces/ISaveChanges.cs`](backend/BackendProject.Domain/Interfaces/ISaveChanges.cs)
+- **Implementation:** [`backend/BackendProject.Infrastructure/Data/AppDbContext.cs`](backend/BackendProject.Infrastructure/Data/AppDbContext.cs) (implements `ISaveChanges`)
+- **Registration:** [`backend/BackendProject.Infrastructure/DependencyInjection.cs`](backend/BackendProject.Infrastructure/DependencyInjection.cs)
 
-**Πώς λειτουργεί - Connection μεταξύ Repository και UnitOfWork:**
+**Πώς λειτουργεί:**
 
-**1. Architecture Overview:**
+**1. Architecture:**
 ```
 Service Layer
-    ↓ (uses)
-UnitOfWork (manages transaction & coordinates repositories)
-    ↓ (provides)
-Repositories (Employees, Departments, Projects)
-    ↓ (share)
-Same DbContext (same transaction scope)
+    ↓ (injects)
+IRepository<T> (Employees, Departments, Projects) + ISaveChanges
+    ↓ (implemented by)
+Repository<T> + AppDbContext (shares same DbContext instance via DI)
 ```
 
-**2. Key Connection Points:**
+**2. Service Pattern:**
+- Services inject `IRepository<T>` για κάθε entity type που χρειάζονται
+- Services inject `ISaveChanges` για persistence
+- Μετά από mutations (Add, Update, SoftDelete), το service καλεί `await _saveChanges.SaveChangesAsync()`
+- Το `SaveChangesAsync` είναι atomic - όλες οι αλλαγές στο DbContext commit-άρονται μαζί
 
-**UnitOfWork creates and manages Repositories:**
-- `UnitOfWork` δημιουργεί instances των `Repository<T>` για κάθε entity type
-- Όλα τα repositories **μοιράζονται το ίδιο `AppDbContext` instance**
-- Όταν `UnitOfWork` ξεκινάει transaction, **όλα τα repositories** αυτόματα λειτουργούν μέσα σε αυτό το transaction
-
-**Repository Implementation:**
-```csharp
-public class Repository<T> : IRepository<T> where T : BaseEntity
-{
-    protected readonly AppDbContext _context;  // Shared DbContext
-    protected readonly DbSet<T> _dbSet;
-
-    public Repository(AppDbContext context)
-    {
-        _context = context;  // Same context instance για όλα τα repositories
-        _dbSet = context.Set<T>();
-    }
-    
-    // Όλες οι operations χρησιμοποιούν το _context που είναι μέσα στο transaction
-    public virtual async Task<T> AddAsync(T entity, ...)
-    {
-        await _dbSet.AddAsync(entity, cancellationToken);
-        return entity;  // Entity προστέθηκε στο change tracker, αλλά δεν έχει save-άρει ακόμα
-    }
-}
-```
-
-**UnitOfWork Implementation:**
-```csharp
-public class UnitOfWork : IUnitOfWork
-{
-    private readonly AppDbContext _context;  // Single DbContext instance
-    private IDbContextTransaction? _transaction;
-
-    public UnitOfWork(AppDbContext context)
-    {
-        _context = context;  // Same context για όλα τα repositories
-    }
-
-    // Lazy initialization - repositories δημιουργούνται on-demand
-    public IRepository<Employee> Employees => 
-        _employees ??= new Repository<Employee>(_context);  // Pass same _context
-    
-    public IRepository<Department> Departments => 
-        _departments ??= new Repository<Department>(_context);  // Same _context
-    
-    public IRepository<Project> Projects => 
-        _projects ??= new Repository<Project>(_context);  // Same _context
-
-    // Transaction management
-    public async Task BeginTransactionAsync(...)
-    {
-        _transaction = await _context.Database.BeginTransactionAsync(...);
-        // Όταν transaction ξεκινάει, ΟΛΑ τα repositories που χρησιμοποιούν αυτό το _context
-        // αυτόματα λειτουργούν μέσα σε αυτό το transaction
-    }
-
-    public async Task SaveChangesAsync(...)
-    {
-        if (_transaction == null)
-            throw new InvalidOperationException("Cannot save without active transaction");
-        
-        // Save όλες τις αλλαγές από ΟΛΑ τα repositories (ακόμα μέσα στο transaction)
-        return await _context.SaveChangesAsync(...);
-    }
-
-    public async Task CommitTransactionAsync(...)
-    {
-        await _context.SaveChangesAsync(...);  // Save changes πρώτα
-        await _transaction.CommitAsync(...);   // Τώρα commit-άρει το transaction
-    }
-}
-```
-
-**3. Transaction Flow με Repository και UnitOfWork:**
-```
-Service calls: await _unitOfWork.ExecuteInTransactionAsync(async () => {
-    ↓
-1. ExecuteInTransactionAsync calls: await _unitOfWork.BeginTransactionAsync()
-    ↓
-2. UnitOfWork.BeginTransactionAsync() starts database transaction
-    ↓
-3. Service uses multiple repositories:
-   - await _unitOfWork.Employees.AddAsync(employee)  → Repository<Employee> uses _context
-   - await _unitOfWork.Projects.Query()...            → Repository<Project> uses _context
-   - await _unitOfWork.Departments.Update(dept)       → Repository<Department> uses _context
-    ↓
-4. All repository operations use the SAME _context (same transaction)
-    ↓
-5. Service calls: await _unitOfWork.SaveChangesAsync()
-    ↓
-6. UnitOfWork.SaveChangesAsync() saves ALL changes from ALL repositories
-   (changes are still inside transaction, not committed yet)
-    ↓
-7. ExecuteInTransactionAsync calls: await _unitOfWork.CommitTransactionAsync()
-    ↓
-8. UnitOfWork.CommitTransactionAsync() commits the transaction
-   → ALL changes from ALL repositories become permanent
-```
-
-**4. Real-World Example (Assign Employee to Project):**
+**3. Example (Assign Employee to Project):**
 ```csharp
 public async Task AssignToProjectAsync(Guid employeeId, Guid projectId)
 {
-    await _unitOfWork.ExecuteInTransactionAsync(async () =>
+    var employeeExists = await _employees.ExistsAsync(employeeId);
+    if (!employeeExists)
+        throw new KeyNotFoundException("Employee not found");
+    
+    var projectExists = await _projects.ExistsAsync(projectId);
+    if (!projectExists)
+        throw new KeyNotFoundException("Project not found");
+    
+    var employee = await _employees.Query()
+        .Include(e => e.EmployeeProjects)
+        .FirstAsync(e => e.Id == employeeId);
+    
+    if (employee.EmployeeProjects.Any(ep => ep.ProjectId == projectId))
+        return;  // Idempotent
+    
+    employee.EmployeeProjects.Add(new EmployeeProject
     {
-        // Step 1: Use Employees repository (shares _context with transaction)
-        var employeeExists = await _unitOfWork.Employees.ExistsAsync(employeeId);
-        if (!employeeExists)
-            throw new KeyNotFoundException("Employee not found");
-        
-        // Step 2: Use Projects repository (same _context, same transaction)
-        var projectExists = await _unitOfWork.Projects.ExistsAsync(projectId);
-        if (!projectExists)
-            throw new KeyNotFoundException("Project not found");
-        
-        // Step 3: Query from Employees repository (same transaction)
-        var employee = await _unitOfWork.Employees.Query()
-            .Include(e => e.EmployeeProjects)
-            .FirstAsync(e => e.Id == employeeId);
-        
-        // Step 4: Modify entity (tracked by _context)
-        employee.EmployeeProjects.Add(new EmployeeProject
-        {
-            EmployeeId = employeeId,
-            ProjectId = projectId
-        });
-        
-        // Step 5: Save ALL changes (from ALL repositories using this _context)
-        await _unitOfWork.SaveChangesAsync();
-        
-        // Αν οποιοδήποτε step αποτύχει:
-        // - Exception thrown
-        // - ExecuteInTransactionAsync catches exception
-        // - Calls RollbackTransactionAsync()
-        // - ALL changes from ALL repositories are rolled back
+        EmployeeId = employeeId,
+        ProjectId = projectId
     });
+    
+    await _saveChanges.SaveChangesAsync();  // Atomic - όλες οι αλλαγές commit-άρονται μαζί
 }
 ```
 
-**5. TransactionExtensions Helper:**
-Το `TransactionExtensions.ExecuteInTransactionAsync` απλοποιεί τη χρήση transactions:
+**4. Error Handling:**
+- Αν exception συμβεί **πριν** το `SaveChangesAsync`: καμία αλλαγή δεν φτάνει στη βάση (αλλαγές μένουν στο change tracker και απορρίπτονται όταν το request τελειώνει)
+- Αν exception συμβεί **κατά** το `SaveChangesAsync`: EF κάνει rollback αυτόματα - καμία partial data
+- Το DbContext είναι scoped per request - όταν το request τελειώνει, το context dispose-άρεται
 
-```csharp
-public static async Task ExecuteInTransactionAsync(
-    this IUnitOfWork unitOfWork,
-    Func<Task> operation,
-    CancellationToken cancellationToken = default)
-{
-    await unitOfWork.BeginTransactionAsync(cancellationToken);
-    try
-    {
-        await operation();  // Execute όλες τις repository operations
-        await unitOfWork.CommitTransactionAsync(cancellationToken);  // Commit αν όλα OK
-    }
-    catch
-    {
-        await unitOfWork.RollbackTransactionAsync(cancellationToken);  // Rollback αν error
-        throw;  // Re-throw exception
-    }
-}
-```
-
-**Τι συμβαίνει αν error:**
-- Αν employee δεν υπάρχει → Exception thrown → `ExecuteInTransactionAsync` catch → `RollbackTransactionAsync()` → Καμία αλλαγή δεν αποθηκεύτηκε
-- Αν project δεν υπάρχει → Exception thrown → Transaction rolled back → Καμία αλλαγή δεν αποθηκεύτηκε
-- Αν database error → Exception thrown → Transaction rolled back → Καμία partial data
-- **Important:** Όλες οι αλλαγές από **όλα τα repositories** rollback-άρονται μαζί (γιατί μοιράζονται το ίδιο `_context`)
-
-**Key Benefits της Connection:**
-- **Shared Context:** Όλα τα repositories μοιράζονται το ίδιο `DbContext`, άρα όλες οι αλλαγές είναι στο ίδιο transaction
-- **Automatic Coordination:** Δεν χρειάζεται να pass-άρεις transaction σε κάθε repository - το `DbContext` το χειρίζεται αυτόματα
-- **Single Save Point:** Ένα `SaveChangesAsync()` save-άρει αλλαγές από όλα τα repositories
-- **Atomic Operations:** Όλες οι operations από πολλαπλά repositories commit-άρονται ή rollback-άρονται μαζί
-- **Simplified Code:** Services δεν χρειάζεται να manage transactions manually - `ExecuteInTransactionAsync` το χειρίζεται
-
-**Όταν χρησιμοποιούνται Transactions:**
-- Δημιουργία employees (με department validation)
-- Ενημέρωση employees (με related data updates)
-- Διαγραφή entities (με cascade checks)
-- Ανάθεση employees σε projects (πολλαπλές operations)
-- Αφαίρεση assignments (με cleanup)
-- Οποιαδήποτε operation που περιλαμβάνει πολλαπλές repository calls
+**Key Benefits:**
+- **Simplified Architecture:** Δεν απαιτείται Unit of Work ή explicit transaction management
+- **EF-Native:** Αξιοποιεί το built-in atomic behavior του EF SaveChangesAsync
+- **Clean Layering:** Application layer εξαρτάται μόνο από Domain (ISaveChanges interface)
+- **Testability:** ISaveChanges μπορεί να mock-αριστεί εύκολα σε tests
 
 ---
 
@@ -766,7 +689,7 @@ public static async Task ExecuteInTransactionAsync(
 ```csharp
 public class Repository<T> : IRepository<T> where T : BaseEntity
 {
-    protected readonly AppDbContext _context;  // Shared DbContext (from UnitOfWork)
+    protected readonly AppDbContext _context;  // DbContext (shared via DI scoping)
     protected readonly DbSet<T> _dbSet;         // EF Core DbSet για entity type T
 
     public Repository(AppDbContext context)
@@ -788,8 +711,7 @@ public virtual async Task<T> AddAsync(T entity, CancellationToken cancellationTo
 }
 ```
 - Προσθέτει entity στο EF Core change tracker
-- Entity δεν αποθηκεύεται στη βάση αμέσως - χρειάζεται `SaveChangesAsync()`
-- Αν το repository χρησιμοποιείται μέσα σε transaction, η αλλαγή είναι μέσα στο transaction
+- Entity δεν αποθηκεύεται στη βάση αμέσως - το service καλεί `ISaveChanges.SaveChangesAsync()` μετά
 
 **2. `Update(T entity)` - Mark entity ως modified:**
 ```csharp
@@ -849,30 +771,36 @@ public virtual async Task<bool> AnyAsync(Expression<Func<T, bool>> predicate, Ca
 - Ελέγχει αν οποιοδήποτε entity match-άρει το predicate
 - Χρήσιμο για uniqueness validation (π.χ. email uniqueness)
 
-**Connection με UnitOfWork:**
+**Connection με Services και ISaveChanges:**
 
-**Shared DbContext:**
-- `Repository<T>` δέχεται `AppDbContext` στον constructor
-- `UnitOfWork` δημιουργεί repositories και **pass-άρει το ίδιο `_context` instance** σε όλα
-- Όλα τα repositories μοιράζονται το ίδιο `DbContext`, άρα όλες οι αλλαγές είναι στο ίδιο transaction scope
+**Shared DbContext via DI:**
+- `Repository<T>` δέχεται `AppDbContext` στον constructor (injected via DI)
+- Όλα τα repositories και το `ISaveChanges` (AppDbContext) είναι **scoped** - μοιράζονται το ίδιο instance ανά HTTP request
+- Όλες οι αλλαγές μένουν στο change tracker μέχρι το service να καλέσει `ISaveChanges.SaveChangesAsync()`
 
 **Example Usage:**
 ```csharp
 // Σε ένα service
 public class EmployeeService
 {
-    private readonly IUnitOfWork _unitOfWork;
+    private readonly IRepository<Employee> _employees;
+    private readonly IRepository<Department> _departments;
+    private readonly ISaveChanges _saveChanges;
 
-    public EmployeeService(IUnitOfWork unitOfWork)
+    public EmployeeService(
+        IRepository<Employee> employees,
+        IRepository<Department> departments,
+        ISaveChanges saveChanges)
     {
-        _unitOfWork = unitOfWork;  // UnitOfWork injected via DI
+        _employees = employees;
+        _departments = departments;
+        _saveChanges = saveChanges;
     }
 
     public async Task<EmployeeResponse> GetByIdAsync(Guid id)
     {
-        // Use repository μέσα από UnitOfWork
-        var employee = await _unitOfWork.Employees.Query()
-            .Include(e => e.Department)      // Eager loading
+        var employee = await _employees.Query()
+            .Include(e => e.Department)
             .Include(e => e.EmployeeProjects)
                 .ThenInclude(ep => ep.Project)
             .FirstOrDefaultAsync(e => e.Id == id);
@@ -885,20 +813,10 @@ public class EmployeeService
 
     public async Task<EmployeeResponse> CreateAsync(CreateEmployeeRequest request)
     {
-        return await _unitOfWork.ExecuteInTransactionAsync(async () =>
-        {
-            // Create entity
-            var employee = EmployeeMapper.ToEntity(request);
-            
-            // Add via repository (uses shared _context from UnitOfWork)
-            await _unitOfWork.Employees.AddAsync(employee);
-            
-            // Save changes (within transaction)
-            await _unitOfWork.SaveChangesAsync();
-            
-            // Map to response
-            return EmployeeMapper.ToResponse(employee);
-        });
+        var employee = EmployeeMapper.ToEntity(request);
+        await _employees.AddAsync(employee);
+        await _saveChanges.SaveChangesAsync();
+        return EmployeeMapper.ToResponse(employee);
     }
 }
 ```
@@ -908,253 +826,12 @@ public class EmployeeService
 - **Consistent Interface:** Ίδια methods για όλα τα entities
 - **Soft Delete Support:** Built-in soft delete functionality
 - **Query Flexibility:** `Query()` method επιτρέπει complex LINQ queries
-- **Transaction Integration:** Αυτόματα integrates με UnitOfWork transactions
+- **Persistence via ISaveChanges:** Services καλούν SaveChangesAsync μετά από mutations για atomic persistence
 - **Testability:** Interface-based design επιτρέπει easy mocking
 
 ---
 
-### 3.8 Unit of Work Pattern
-
-**Feature:** Coordinates multiple repository operations και manages database transactions με shared DbContext.
-
-**Τι είναι:** Το Unit of Work είναι ένα pattern που διατηρεί μια λίστα objects που επηρεάζονται από μια business transaction και συντονίζει την εγγραφή αλλαγών. Εξασφαλίζει ότι όλες οι αλλαγές commit-άρονται μαζί ως ένα atomic operation. Στο project μας, το `UnitOfWork` δημιουργεί και διαχειρίζεται repositories, και παρέχει transaction management.
-
-**Γιατί χρησιμοποιείται:**
-- **Data Consistency:** Εξασφαλίζει ότι όλες οι αλλαγές επιτυγχάνουν ή αποτυγχάνουν μαζί
-- **Transaction Management:** Διαχειρίζεται database transactions
-- **Single Point:** Παρέχει single point για saving changes
-- **Groups Operations:** Ομαδοποιεί πολλαπλές repository operations μαζί
-- **Shared Context:** Εξασφαλίζει ότι όλα τα repositories μοιράζονται το ίδιο DbContext (same transaction)
-
-**Πού βρίσκεται:**
-- **Interface:** [`backend/BackendProject.Domain/Interfaces/IUnitOfWork.cs`](backend/BackendProject.Domain/Interfaces/IUnitOfWork.cs)
-- **Implementation:** [`backend/BackendProject.Infrastructure/Repositories/UnitOfWork.cs`](backend/BackendProject.Infrastructure/Repositories/UnitOfWork.cs)
-
-**UnitOfWork Implementation Details:**
-
-**Class Structure:**
-```csharp
-public class UnitOfWork : IUnitOfWork
-{
-    private readonly AppDbContext _context;           // Single DbContext instance
-    private IDbContextTransaction? _transaction;     // Active transaction (if any)
-    private IRepository<Employee>? _employees;       // Lazy-initialized repositories
-    private IRepository<Department>? _departments;
-    private IRepository<Project>? _projects;
-    private bool _disposed;
-
-    public UnitOfWork(AppDbContext context)
-    {
-        _context = context;  // Same context για όλα τα repositories
-    }
-}
-```
-
-**Key Properties - Repository Access:**
-
-**Lazy Initialization Pattern:**
-```csharp
-public IRepository<Employee> Employees => 
-    _employees ??= new Repository<Employee>(_context);  // Create on first access
-
-public IRepository<Department> Departments => 
-    _departments ??= new Repository<Department>(_context);  // Same _context
-
-public IRepository<Project> Projects => 
-    _projects ??= new Repository<Project>(_context);  // Same _context
-```
-
-**Τι κάνει:**
-- Repositories δημιουργούνται **on-demand** (lazy initialization)
-- **Όλα τα repositories** receive το **ίδιο `_context` instance**
-- Αυτό εξασφαλίζει ότι όλες οι αλλαγές είναι στο ίδιο transaction scope
-
-**Key Methods - Transaction Management:**
-
-**1. `BeginTransactionAsync()` - Ξεκινάει database transaction:**
-```csharp
-public async Task BeginTransactionAsync(CancellationToken cancellationToken = default)
-{
-    if (_transaction != null)
-        throw new InvalidOperationException("A transaction is already active...");
-
-    _transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
-    // Όταν transaction ξεκινάει, ΟΛΑ τα repositories που χρησιμοποιούν αυτό το _context
-    // αυτόματα λειτουργούν μέσα σε αυτό το transaction
-}
-```
-- Ξεκινάει database transaction στο `_context`
-- **Important:** Όλα τα repositories που χρησιμοποιούν αυτό το `_context` αυτόματα είναι μέσα στο transaction
-- Throws exception αν transaction είναι ήδη active
-
-**2. `SaveChangesAsync()` - Save changes (requires active transaction):**
-```csharp
-public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
-{
-    if (_transaction == null)
-        throw new InvalidOperationException("Cannot save changes without an active transaction...");
-
-    // Save όλες τις αλλαγές από ΟΛΑ τα repositories (ακόμα μέσα στο transaction)
-    return await _context.SaveChangesAsync(cancellationToken);
-}
-```
-- **Requires active transaction** (πρέπει να έχεις καλέσει `BeginTransactionAsync()` πρώτα)
-- Save-άρει **όλες τις αλλαγές** από **όλα τα repositories** που χρησιμοποιούν αυτό το `_context`
-- Changes είναι **ακόμα μέσα στο transaction** (δεν έχουν commit-άρει ακόμα)
-
-**3. `CommitTransactionAsync()` - Commit transaction:**
-```csharp
-public async Task CommitTransactionAsync(CancellationToken cancellationToken = default)
-{
-    if (_transaction == null)
-        throw new InvalidOperationException("No active transaction to commit.");
-
-    try
-    {
-        // Save changes πρώτα (αν δεν έχουν save-άρει ήδη)
-        await _context.SaveChangesAsync(cancellationToken);
-        // Commit transaction - όλες οι αλλαγές γίνονται permanent
-        await _transaction.CommitAsync(cancellationToken);
-    }
-    catch
-    {
-        await RollbackTransactionAsync(cancellationToken);  // Rollback αν error
-        throw;
-    }
-    finally
-    {
-        await _transaction.DisposeAsync();
-        _transaction = null;  // Clear transaction
-    }
-}
-```
-- Save-άρει changes πρώτα (αν δεν έχουν save-άρει ήδη)
-- Commit-άρει transaction - **όλες οι αλλαγές γίνονται permanent**
-- Αν error, rollback-άρει transaction
-- Cleanup transaction resources
-
-**4. `RollbackTransactionAsync()` - Rollback transaction:**
-```csharp
-public async Task RollbackTransactionAsync(CancellationToken cancellationToken = default)
-{
-    if (_transaction == null)
-        throw new InvalidOperationException("No active transaction to rollback.");
-
-    try
-    {
-        await _transaction.RollbackAsync(cancellationToken);  // Undo όλες τις αλλαγές
-    }
-    finally
-    {
-        await _transaction.DisposeAsync();
-        _transaction = null;  // Clear transaction
-    }
-}
-```
-- Rollback-άρει transaction - **όλες οι αλλαγές αναιρούνται**
-- Cleanup transaction resources
-
-**5. `Dispose()` - Cleanup:**
-```csharp
-protected virtual void Dispose(bool disposing)
-{
-    if (!_disposed && disposing)
-    {
-        // Rollback any active transaction αν dispose-άρει χωρίς commit
-        if (_transaction != null)
-        {
-            try
-            {
-                _transaction.Rollback();
-                _transaction.Dispose();
-            }
-            catch { }  // Ignore errors during disposal
-        }
-
-        _context.Dispose();
-        _disposed = true;
-    }
-}
-```
-- Αν dispose-άρει με active transaction, rollback-άρει αυτόματα
-- Dispose `_context`
-
-**Connection με Repository:**
-
-**Shared DbContext:**
-```
-UnitOfWork
-    ↓ (creates with same _context)
-Repository<Employee>  ──┐
-Repository<Department> ─┼──→ Same AppDbContext instance
-Repository<Project>    ─┘      (same transaction scope)
-```
-
-**Transaction Flow:**
-```
-1. Service: await _unitOfWork.BeginTransactionAsync()
-   → UnitOfWork starts transaction on _context
-
-2. Service: await _unitOfWork.Employees.AddAsync(employee)
-   → Repository<Employee> uses _context (inside transaction)
-
-3. Service: await _unitOfWork.Projects.Query()...
-   → Repository<Project> uses _context (same transaction)
-
-4. Service: await _unitOfWork.SaveChangesAsync()
-   → Saves ALL changes from ALL repositories (still in transaction)
-
-5. Service: await _unitOfWork.CommitTransactionAsync()
-   → Commits transaction → ALL changes become permanent
-```
-
-**Example Usage:**
-```csharp
-public class EmployeeService
-{
-    private readonly IUnitOfWork _unitOfWork;
-
-    public async Task AssignToProjectAsync(Guid employeeId, Guid projectId)
-    {
-        // Use TransactionExtensions helper για simplified transaction management
-        await _unitOfWork.ExecuteInTransactionAsync(async () =>
-        {
-            // Use multiple repositories - all share same _context (same transaction)
-            var employee = await _unitOfWork.Employees.Query()
-                .Include(e => e.EmployeeProjects)
-                .FirstAsync(e => e.Id == employeeId);
-            
-            var project = await _unitOfWork.Projects.Query()
-                .FirstAsync(p => p.Id == projectId);
-            
-            // Modify entity (tracked by shared _context)
-            employee.EmployeeProjects.Add(new EmployeeProject
-            {
-                EmployeeId = employeeId,
-                ProjectId = projectId
-            });
-            
-            // Save changes (from ALL repositories using this _context)
-            await _unitOfWork.SaveChangesAsync();
-            
-            // Transaction commits automatically (via ExecuteInTransactionAsync)
-            // Αν error, transaction rolls back automatically
-        });
-    }
-}
-```
-
-**Benefits:**
-- **Single Transaction Scope:** Όλα τα repositories μοιράζονται το ίδιο transaction
-- **Atomic Operations:** Όλες οι αλλαγές commit-άρονται ή rollback-άρονται μαζί
-- **Simplified Management:** Ένα UnitOfWork instance manage-άρει όλα τα repositories
-- **Consistent Interface:** Services χρησιμοποιούν `IUnitOfWork` interface (testable)
-- **Automatic Cleanup:** Dispose rollback-άρει active transactions
-- **Error Safety:** Automatic rollback σε errors
-
----
-
-### 3.9 Swagger/OpenAPI Documentation
+### 3.8 Swagger/OpenAPI Documentation
 
 **Feature:** Interactive API documentation με Swagger annotations, XML comments, examples, και comprehensive endpoint documentation.
 
@@ -1328,7 +1005,7 @@ public class EmployeesController : ControllerBase
 
 ---
 
-### 3.10 Logging (Serilog)
+### 3.9 Logging (Serilog)
 
 **Feature:** Structured logging με file και console output.
 
@@ -1366,7 +1043,7 @@ Log.Logger = new LoggerConfiguration()
 ```
 
 
-### 3.11 Dependency Injection
+### 3.10 Dependency Injection
 
 **Feature:** Constructor injection για όλα τα services, repositories, και dependencies.
 
@@ -1384,23 +1061,23 @@ Log.Logger = new LoggerConfiguration()
 - **API Registration:** [`backend/BackendProject.API/Program.cs`](backend/BackendProject.API/Program.cs)
 
 **Lifetime Types:**
-- **Scoped** - Ένα instance ανά HTTP request (Services, Repositories, UnitOfWork, DbContext)
+- **Scoped** - Ένα instance ανά HTTP request (Services, Repositories, DbContext, ISaveChanges)
 - **Transient** - Νέο instance κάθε φορά (Validators)
-- **Singleton** - Ένα instance για ολόκληρη την εφαρμογή ( Serilog  -> Log.Logger = new LoggerConfiguration().CreateLogger();)
+- **Singleton** - Ένα instance για ολόκληρη την εφαρμογή (Serilog -> Log.Logger = new LoggerConfiguration().CreateLogger();)
 
 **Registrations:**
 - Services (scoped)
-- Repositories (scoped)
-- UnitOfWork (scoped)
+- Repositories (scoped, generic `IRepository<>`)
+- ISaveChanges (scoped, resolves to AppDbContext)
 - Validators (από assembly)
 - DbContext (scoped)
 - Filters και middleware
 
 **Example:**
 ```csharp
-// Registration
-services.AddScoped<IEmployeeService, EmployeeService>();
-services.AddScoped<IUnitOfWork, UnitOfWork>();
+// Registration (Infrastructure)
+services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
+services.AddScoped<ISaveChanges>(sp => sp.GetRequiredService<AppDbContext>());
 
 // Usage (injected via constructor)
 public EmployeesController(IEmployeeService employeeService)
@@ -1411,7 +1088,7 @@ public EmployeesController(IEmployeeService employeeService)
 
 ---
 
-### 3.12 Database Migrations
+### 3.11 Database Migrations
 
 **Feature:** Automatic migration application on startup και manual migration support.
 
@@ -1441,7 +1118,7 @@ public EmployeesController(IEmployeeService employeeService)
 
 ---
 
-### 3.13 Data Seeding
+### 3.12 Data Seeding
 
 **Feature:** Initial data seeding.
 
@@ -1467,7 +1144,7 @@ public EmployeesController(IEmployeeService employeeService)
 
 ---
 
-### 3.14 CORS Configuration
+### 3.13 CORS Configuration
 
 **Feature:** Cross-Origin Resource Sharing configuration για frontend integration.
 
@@ -1501,7 +1178,7 @@ builder.Services.AddCors(options =>
 
 ---
 
-### 3.15 Health Check Endpoint
+### 3.14 Health Check Endpoint
 
 **Feature:** Health check endpoint για Docker και monitoring.
 
@@ -1532,7 +1209,7 @@ builder.Services.AddCors(options =>
 
 ---
 
-### 3.16 Docker & Containerization
+### 3.15 Docker & Containerization
 
 **Feature:** Complete Docker support με multi-stage builds, Docker Compose για development, και health checks.
 
@@ -1855,7 +1532,7 @@ public class EmployeeServiceTests : ServiceTestBase
 
     public EmployeeServiceTests()
     {
-        _service = new EmployeeService(UnitOfWork);
+        _service = new EmployeeService(Employees, Departments, Projects, SaveChanges);
         SeedTestData();
     }
 
@@ -1894,7 +1571,7 @@ public class EmployeeValidatorTests : ValidatorTestBase
 
     public EmployeeValidatorTests()
     {
-        _validator = new CreateEmployeeValidator(UnitOfWork);
+        _validator = new CreateEmployeeValidator(Employees, Departments);
     }
 
     [Theory]
@@ -1924,7 +1601,8 @@ Base class για service tests με in-memory database setup:
 
 **Τι παρέχει:**
 - In-memory `AppDbContext` (isolated database per test)
-- `UnitOfWork` instance για service testing
+- `IRepository<Employee>`, `IRepository<Department>`, `IRepository<Project>` instances
+- `ISaveChanges` (resolves to Context) για persistence
 - Automatic cleanup (dispose) μετά από κάθε test
 - Unique database name per test (no test interference)
 
@@ -1933,7 +1611,10 @@ Base class για service tests με in-memory database setup:
 public abstract class ServiceTestBase : IDisposable
 {
     protected readonly AppDbContext Context;
-    protected readonly UnitOfWork UnitOfWork;
+    protected readonly IRepository<Employee> Employees;
+    protected readonly IRepository<Department> Departments;
+    protected readonly IRepository<Project> Projects;
+    protected readonly ISaveChanges SaveChanges;
 
     protected ServiceTestBase()
     {
@@ -1942,7 +1623,10 @@ public abstract class ServiceTestBase : IDisposable
             .Options;
 
         Context = new AppDbContext(options);
-        UnitOfWork = new UnitOfWork(Context);
+        Employees = new Repository<Employee>(Context);
+        Departments = new Repository<Department>(Context);
+        Projects = new Repository<Project>(Context);
+        SaveChanges = Context;
     }
 }
 ```
@@ -1954,7 +1638,7 @@ Base class για validator tests:
 
 **Τι παρέχει:**
 - In-memory database για async validation checks (uniqueness, foreign keys)
-- `UnitOfWork` για validators που χρειάζονται database access
+- `IRepository<Employee>`, `IRepository<Department>`, `IRepository<Project>` για validators που χρειάζονται database access
 - Test data seeding methods
 
 **Test Coverage:**

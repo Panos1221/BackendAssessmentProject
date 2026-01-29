@@ -14,7 +14,7 @@ public class ProjectServiceTests : ServiceTestBase
 
     public ProjectServiceTests()
     {
-        _projectService = new ProjectService(UnitOfWork);
+        _projectService = new ProjectService(Projects, Employees, SaveChanges);
         SeedTestData();
     }
 

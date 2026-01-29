@@ -1,4 +1,5 @@
 using BackendProject.Application.DTOs;
+using BackendProject.Domain.Entities;
 using BackendProject.Domain.Interfaces;
 using FluentValidation;
 
@@ -9,19 +10,18 @@ namespace BackendProject.Application.Validators;
 /// </summary>
 public class CreateDepartmentValidator : AbstractValidator<CreateDepartmentRequest>
 {
-    public CreateDepartmentValidator(IUnitOfWork unitOfWork)
+    public CreateDepartmentValidator(IRepository<Department> departments)
     {
         ApplyNameRules();
         ApplyDescriptionRules();
 
-        // Uniqueness check for new departments
         RuleFor(x => x.Name)
             .MustAsync(async (name, cancellation) =>
             {
                 if (string.IsNullOrWhiteSpace(name))
                     return true;
 
-                var exists = await unitOfWork.Departments.AnyAsync(
+                var exists = await departments.AnyAsync(
                     d => d.Name.ToLower() == name.ToLower(),
                     cancellation);
                 return !exists;
@@ -48,19 +48,18 @@ public class CreateDepartmentValidator : AbstractValidator<CreateDepartmentReque
 /// </summary>
 public class UpdateDepartmentValidator : AbstractValidator<UpdateDepartmentRequest>
 {
-    public UpdateDepartmentValidator(IUnitOfWork unitOfWork)
+    public UpdateDepartmentValidator(IRepository<Department> departments)
     {
         ApplyNameRules();
         ApplyDescriptionRules();
 
-        // Uniqueness check excluding current department
         RuleFor(x => x.Name)
             .MustAsync(async (request, name, cancellation) =>
             {
                 if (string.IsNullOrWhiteSpace(name))
                     return true;
 
-                var exists = await unitOfWork.Departments.AnyAsync(
+                var exists = await departments.AnyAsync(
                     d => d.Name.ToLower() == name.ToLower() && d.Id != request.Id,
                     cancellation);
                 return !exists;

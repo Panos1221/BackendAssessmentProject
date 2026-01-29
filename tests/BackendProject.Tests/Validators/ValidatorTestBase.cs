@@ -1,19 +1,21 @@
+using BackendProject.Domain.Entities;
 using BackendProject.Domain.Interfaces;
 using BackendProject.Infrastructure.Data;
 using BackendProject.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Moq;
 
 namespace BackendProject.Tests.Validators;
 
 /// <summary>
-/// Base class for validator tests providing common setup for in-memory database and UnitOfWork.
+/// Base class for validator tests providing common setup for in-memory database and repositories.
 /// </summary>
 public abstract class ValidatorTestBase : IDisposable
 {
     protected readonly AppDbContext Context;
-    protected readonly IUnitOfWork UnitOfWork;
+    protected readonly IRepository<Employee> Employees;
+    protected readonly IRepository<Department> Departments;
+    protected readonly IRepository<Project> Projects;
 
     protected ValidatorTestBase()
     {
@@ -23,7 +25,9 @@ public abstract class ValidatorTestBase : IDisposable
             .Options;
 
         Context = new AppDbContext(options);
-        UnitOfWork = new UnitOfWork(Context);
+        Employees = new Repository<Employee>(Context);
+        Departments = new Repository<Department>(Context);
+        Projects = new Repository<Project>(Context);
     }
 
     public virtual void Dispose()

@@ -14,8 +14,8 @@ public class EmployeeValidatorsTests : ValidatorTestBase
 
     public EmployeeValidatorsTests()
     {
-        _createValidator = new CreateEmployeeValidator(UnitOfWork);
-        _updateValidator = new UpdateEmployeeValidator(UnitOfWork);
+        _createValidator = new CreateEmployeeValidator(Employees, Departments);
+        _updateValidator = new UpdateEmployeeValidator(Employees, Departments);
         SeedTestData();
     }
 

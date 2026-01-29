@@ -1,10 +1,11 @@
 using BackendProject.Domain.Common;
 using BackendProject.Domain.Entities;
+using BackendProject.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace BackendProject.Infrastructure.Data;
 
-public class AppDbContext : DbContext
+public class AppDbContext : DbContext, ISaveChanges
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
     {

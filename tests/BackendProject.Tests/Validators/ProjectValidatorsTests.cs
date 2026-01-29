@@ -13,8 +13,8 @@ public class ProjectValidatorsTests : ValidatorTestBase
 
     public ProjectValidatorsTests()
     {
-        _createValidator = new CreateProjectValidator(UnitOfWork);
-        _updateValidator = new UpdateProjectValidator(UnitOfWork);
+        _createValidator = new CreateProjectValidator(Projects);
+        _updateValidator = new UpdateProjectValidator(Projects);
         SeedTestData();
     }
 

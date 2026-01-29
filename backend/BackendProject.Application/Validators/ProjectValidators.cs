@@ -1,4 +1,5 @@
 using BackendProject.Application.DTOs;
+using BackendProject.Domain.Entities;
 using BackendProject.Domain.Interfaces;
 using FluentValidation;
 
@@ -9,7 +10,7 @@ namespace BackendProject.Application.Validators;
 /// </summary>
 public class CreateProjectValidator : AbstractValidator<CreateProjectRequest>
 {
-    public CreateProjectValidator(IUnitOfWork unitOfWork)
+    public CreateProjectValidator(IRepository<Project> projects)
     {
         ApplyDescriptionRules();
         ApplyDateRules();
@@ -22,7 +23,7 @@ public class CreateProjectValidator : AbstractValidator<CreateProjectRequest>
                 if (string.IsNullOrWhiteSpace(name))
                     return true;
 
-                var exists = await unitOfWork.Projects.AnyAsync(
+                var exists = await projects.AnyAsync(
                     p => p.Name.ToLower() == name.ToLower(),
                     cancellation);
                 return !exists;
@@ -53,7 +54,7 @@ public class CreateProjectValidator : AbstractValidator<CreateProjectRequest>
 /// </summary>
 public class UpdateProjectValidator : AbstractValidator<UpdateProjectRequest>
 {
-    public UpdateProjectValidator(IUnitOfWork unitOfWork)
+    public UpdateProjectValidator(IRepository<Project> projects)
     {
         ApplyDescriptionRules();
         ApplyDateRules();
@@ -66,7 +67,7 @@ public class UpdateProjectValidator : AbstractValidator<UpdateProjectRequest>
                 if (string.IsNullOrWhiteSpace(name))
                     return true;
 
-                var exists = await unitOfWork.Projects.AnyAsync(
+                var exists = await projects.AnyAsync(
                     p => p.Name.ToLower() == name.ToLower() && p.Id != request.Id,
                     cancellation);
                 return !exists;

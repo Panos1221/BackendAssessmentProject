@@ -13,8 +13,8 @@ public class DepartmentValidatorsTests : ValidatorTestBase
 
     public DepartmentValidatorsTests()
     {
-        _createValidator = new CreateDepartmentValidator(UnitOfWork);
-        _updateValidator = new UpdateDepartmentValidator(UnitOfWork);
+        _createValidator = new CreateDepartmentValidator(Departments);
+        _updateValidator = new UpdateDepartmentValidator(Departments);
         SeedTestData();
     }
 
@@ -114,11 +114,11 @@ public class DepartmentValidatorsTests : ValidatorTestBase
         };
 
         // Act
-        var result = await _createValidator.TestValidateAsync(request);
+        var result = await _createValidator.ValidateAsync(request);
 
         // Assert
-        result.ShouldHaveValidationErrorFor(x => x.Name)
-            .WithErrorMessage("Department name cannot exceed 200 characters");
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.PropertyName == "Name" && e.ErrorMessage == "Department name cannot exceed 200 characters");
     }
 
     [Fact]

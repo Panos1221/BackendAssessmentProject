@@ -19,7 +19,7 @@ public static class DependencyInjection
 
         // Register repositories
         services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
-        services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<ISaveChanges>(sp => sp.GetRequiredService<AppDbContext>());
 
         return services;
     }

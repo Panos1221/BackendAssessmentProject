@@ -14,7 +14,7 @@ public class EmployeeServiceTests : ServiceTestBase
 
     public EmployeeServiceTests()
     {
-        _employeeService = new EmployeeService(UnitOfWork);
+        _employeeService = new EmployeeService(Employees, Departments, Projects, SaveChanges);
         SeedTestData();
     }
 

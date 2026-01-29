@@ -28,8 +28,8 @@ public class DepartmentValidatorTests : ValidatorTestBase
 
     public DepartmentValidatorTests()
     {
-        _createValidator = new CreateDepartmentValidator(UnitOfWork);
-        _updateValidator = new UpdateDepartmentValidator(UnitOfWork);
+        _createValidator = new CreateDepartmentValidator(Departments);
+        _updateValidator = new UpdateDepartmentValidator(Departments);
         SeedTestData();
     }
 

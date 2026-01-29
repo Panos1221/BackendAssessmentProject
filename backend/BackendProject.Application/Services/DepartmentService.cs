@@ -10,16 +10,23 @@ namespace BackendProject.Application.Services;
 
 public class DepartmentService : IDepartmentService
 {
-    private readonly IUnitOfWork _unitOfWork;
+    private readonly IRepository<Department> _departments;
+    private readonly IRepository<Employee> _employees;
+    private readonly ISaveChanges _saveChanges;
 
-    public DepartmentService(IUnitOfWork unitOfWork)
+    public DepartmentService(
+        IRepository<Department> departments,
+        IRepository<Employee> employees,
+        ISaveChanges saveChanges)
     {
-        _unitOfWork = unitOfWork;
+        _departments = departments;
+        _employees = employees;
+        _saveChanges = saveChanges;
     }
 
     public async Task<PaginatedResult<DepartmentResponse>> GetAllAsync(PaginationParams pagination, CancellationToken cancellationToken = default)
     {
-        var query = _unitOfWork.Departments.Query()
+        var query = _departments.Query()
             .Include(d => d.Employees);
 
         return await query.ToPaginatedResultAsync(pagination, DepartmentMapper.ToResponse, cancellationToken);
@@ -27,7 +34,7 @@ public class DepartmentService : IDepartmentService
 
     public async Task<DepartmentResponse> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var department = await _unitOfWork.Departments.Query()
+        var department = await _departments.Query()
             .Include(d => d.Employees)
             .FirstOrDefaultAsync(d => d.Id == id, cancellationToken)
             ?? throw new KeyNotFoundException($"Department with ID {id} not found");
@@ -37,7 +44,7 @@ public class DepartmentService : IDepartmentService
 
     public async Task<PaginatedResult<DepartmentResponse>> SearchAsync(string searchTerm, PaginationParams pagination, CancellationToken cancellationToken = default)
     {
-        var query = _unitOfWork.Departments.Query()
+        var query = _departments.Query()
             .Include(d => d.Employees)
             .Where(d => EF.Functions.Like(d.Name, $"%{searchTerm}%") ||
                         (d.Description != null && EF.Functions.Like(d.Description, $"%{searchTerm}%")));
@@ -47,11 +54,11 @@ public class DepartmentService : IDepartmentService
 
     public async Task<PaginatedResult<EmployeeResponse>> GetEmployeesAsync(Guid departmentId, PaginationParams pagination, CancellationToken cancellationToken = default)
     {
-        var departmentExists = await _unitOfWork.Departments.ExistsAsync(departmentId, cancellationToken);
+        var departmentExists = await _departments.ExistsAsync(departmentId, cancellationToken);
         if (!departmentExists)
             throw new KeyNotFoundException($"Department with ID {departmentId} not found");
 
-        var query = _unitOfWork.Employees.Query()
+        var query = _employees.Query()
             .Include(e => e.Department)
             .Where(e => e.DepartmentId == departmentId);
 
@@ -60,54 +67,48 @@ public class DepartmentService : IDepartmentService
 
     public async Task<DepartmentResponse> CreateAsync(CreateDepartmentRequest request, CancellationToken cancellationToken = default)
     {
-        return await _unitOfWork.ExecuteInTransactionAsync(async () =>
+        var department = new Department
         {
-            var department = new Department
-            {
-                Id = Guid.NewGuid(),
-                Name = request.Name,
-                Description = request.Description
-            };
+            Id = Guid.NewGuid(),
+            Name = request.Name,
+            Description = request.Description
+        };
 
-            await _unitOfWork.Departments.AddAsync(department, cancellationToken);
+        await _departments.AddAsync(department, cancellationToken);
+        await _saveChanges.SaveChangesAsync(cancellationToken);
 
-            return new DepartmentResponse
-            {
-                Id = department.Id,
-                Name = department.Name,
-                Description = department.Description,
-                EmployeeCount = 0
-            };
-        }, cancellationToken);
+        return new DepartmentResponse
+        {
+            Id = department.Id,
+            Name = department.Name,
+            Description = department.Description,
+            EmployeeCount = 0
+        };
     }
 
     public async Task<DepartmentResponse> UpdateAsync(Guid id, UpdateDepartmentRequest request, CancellationToken cancellationToken = default)
     {
-        return await _unitOfWork.ExecuteInTransactionAsync(async () =>
-        {
-            var department = await _unitOfWork.Departments.Query()
-                .Include(d => d.Employees)
-                .FirstOrDefaultAsync(d => d.Id == id, cancellationToken)
-                ?? throw new KeyNotFoundException($"Department with ID {id} not found");
+        var department = await _departments.Query()
+            .Include(d => d.Employees)
+            .FirstOrDefaultAsync(d => d.Id == id, cancellationToken)
+            ?? throw new KeyNotFoundException($"Department with ID {id} not found");
 
-            department.Name = request.Name;
-            department.Description = request.Description;
+        department.Name = request.Name;
+        department.Description = request.Description;
 
-            _unitOfWork.Departments.Update(department);
+        _departments.Update(department);
+        await _saveChanges.SaveChangesAsync(cancellationToken);
 
-            return DepartmentMapper.MapToResponse(department);
-        }, cancellationToken);
+        return DepartmentMapper.MapToResponse(department);
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        await _unitOfWork.ExecuteInTransactionAsync(async () =>
-        {
-            var exists = await _unitOfWork.Departments.ExistsAsync(id, cancellationToken);
-            if (!exists)
-                throw new KeyNotFoundException($"Department with ID {id} not found");
+        var exists = await _departments.ExistsAsync(id, cancellationToken);
+        if (!exists)
+            throw new KeyNotFoundException($"Department with ID {id} not found");
 
-            await _unitOfWork.Departments.SoftDeleteAsync(id, cancellationToken);
-        }, cancellationToken);
+        await _departments.SoftDeleteAsync(id, cancellationToken);
+        await _saveChanges.SaveChangesAsync(cancellationToken);
     }
 }
