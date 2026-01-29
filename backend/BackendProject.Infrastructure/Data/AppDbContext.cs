@@ -32,6 +32,11 @@ public class AppDbContext : DbContext
                     .MakeGenericMethod(entityType.ClrType);
                 method.Invoke(null, new object[] { modelBuilder });
             }
+            
+            // Without reflection: 
+            //modelBuilder.Entity<Employee>().HasQueryFilter(e => !e.IsDeleted);
+            //modelBuilder.Entity<Department>().HasQueryFilter(e => !e.IsDeleted);
+            //modelBuilder.Entity<Project>().HasQueryFilter(e => !e.IsDeleted);
         }
 
         // Seed data
